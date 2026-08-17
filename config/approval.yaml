@@ -1,0 +1,10 @@
+# Per-gate approval mode: gated (human approve/reject) | auto (hands-free).
+global:
+  auto_approve: false
+gates:
+  product: "gated"
+  creator: "gated"
+  voice: "gated"
+  script: "gated"
+  storyboard: "gated"
+  video: "gated"

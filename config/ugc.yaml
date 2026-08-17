@@ -1,0 +1,13 @@
+# UGC ad defaults.
+default_target_s: 30
+min_target_s: 15
+max_target_s: 60
+style_presets:
+  - "Authentic Bathroom GRWM"
+  - "Clean Minimal Tech"
+  - "Warm Morning Lifestyle"
+  - "Gritty Handheld Vlog"
+  - "Calm Luxury Aesthetic"
+  - "Bright Studio Product"
+spoken_ratio_min: 0.70
+product_entry_range: [0.40, 0.60]

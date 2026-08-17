@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing Studio</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b21; --panel2:#1f242c; --line:#2a303a;
+          --text:#e6e9ef; --muted:#9aa3b2; --accent:#4f8cff; --good:#34c98e;
+          --warn:#e2b93b; --bad:#ff5d5d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg);
+         color:var(--text); font-size:14px; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px;
+           align-items:center; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:16px; margin:0; }
+  #groups { display:flex; flex-direction:column; gap:8px; padding:12px; border-right:1px solid var(--line);
+            width:250px; min-width:250px; height:calc(100vh - 56px); overflow:auto; position:sticky; top:56px; }
+  #main { flex:1; padding:16px; overflow:auto; height:calc(100vh - 56px); }
+  .row { display:flex; }
+  .chip { padding:2px 8px; border-radius:10px; font-size:11px; }
+  .chip.good { background:#123525; color:var(--good); }
+  .chip.warn { background:#3a2e0d; color:var(--warn); }
+  .chip.bad { background:#3a1515; color:var(--bad); }
+  .chip.muted { background:#20242c; color:var(--muted); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:14px; margin-bottom:14px; }
+  .panel h2 { margin:0 0 10px; font-size:14px; }
+  .panel h3 { margin:12px 0 6px; font-size:13px; }
+  button { background:var(--panel2); color:var(--text); border:1px solid var(--line);
+           border-radius:7px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.good { background:#14432e; border-color:#1c5c40; color:var(--good); }
+  button.bad { background:#431414; border-color:#641f1f; color:var(--bad); }
+  input, textarea, select { background:var(--panel2); color:var(--text); border:1px solid var(--line);
+                            border-radius:7px; padding:6px 8px; font-size:13px; width:100%;
+                            margin:3px 0; font-family:inherit; }
+  textarea { resize:vertical; }
+  label { font-size:11px; color:var(--muted); display:block; margin-top:8px; }
+  .grid { display:grid; gap:10px; }
+  .grid.cols2 { grid-template-columns:1fr 1fr; }
+  .kf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .kf-grid img { width:100%; border-radius:6px; border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .muted { color:var(--muted); }
+  .badge { display:inline-block; min-width:90px; text-align:center; }
+  .note { background:#2a2a10; border:1px solid #4a4a18; color:#e8dc9a; padding:8px 10px;
+          border-radius:7px; font-size:12.5px; margin:6px 0; }
+  #activity { position:fixed; right:16px; bottom:16px; background:var(--panel2); border:1px solid
+              var(--line); border-radius:10px; padding:10px 14px; max-width:360px; font-size:12px;
+              box-shadow:0 8px 24px rgba(0,0,0,.4); display:none; z-index:10; }
+  video { width:100%; border-radius:8px; background:#000; }
+  .ad-card { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px;
+             cursor:pointer; }
+  .ad-card:hover { border-color:var(--accent); }
+  .empty { color:var(--muted); padding:8px 0; }
+</style>
+</head>
+<body>
+<div class="row">
+  <aside id="groups"></aside>
+  <main id="main"></main>
+</div>
+<div id="activity"></div>
+
+<script>
+const API = "/api/action";
+let S = null;
+let selGroup = null, selAd = null;
+const draft = {};
+let typing = false;
+let lastKey = "";
+document.addEventListener("focusin", e => { if (e.target.closest("input,textarea,select")) typing = true; });
+document.addEventListener("focusout", e => { if (e.target.closest("input,textarea,select")) typing = false; });
+
+async function post(body) {
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function refresh() {
+  const r = await fetch("/api/state");
+  S = await r.json();
+  const key = JSON.stringify(S);
+  if (!typing && key !== lastKey) { lastKey = key; render(); }
+  const running = Object.values(S.actions).some(a => a.state === "running");
+  if (running) showActivity(S);
+  else document.getElementById("activity").style.display = "none";
+}
+
+function chip(status) {
+  const meaning = { approved: "Approved — this step is done",
+                    rejected: "Rejected — revise with feedback",
+                    pending: "Generated — awaiting your review/approval",
+                    none: "Not started yet",
+                    idle: "Not started yet" };
+  const t = meaning[status] || status || "not started";
+  if (status === "approved") return `<span class="chip good" title="${t}">approved</span>`;
+  if (status === "rejected") return `<span class="chip bad" title="${t}">rejected</span>`;
+  if (status === "pending") return `<span class="chip warn" title="${t}">pending</span>`;
+  return `<span class="chip muted" title="${t}">${status || "none"}</span>`;
+}
+
+function fileAsDataUrl(file, cb) {
+  const rd = new FileReader();
+  rd.onload = () => cb(rd.result);
+  rd.readAsDataURL(file);
+}
+
+// ---------- render ----------
+
+function render() {
+  renderGroups();
+  if (!selGroup && S.groups.length) selGroup = S.groups[0].id;
+  renderMain();
+}
+
+function renderGroups() {
+  const el = document.getElementById("groups");
+  let h = `<h2 style="margin:4px 0 6px;font-size:13px;">Ad Groups</h2>`;
+  for (const g of S.groups) {
+    h += `<button style="text-align:left;width:100%;${g.id===selGroup?'border-color:var(--accent)':''}"
+             onclick="selGroup='${g.id}';selAd=null;render();">${esc(g.name)}
+             ${chip(g.product_gate.status)}</button>`;
+  }
+  h += `<hr style="border:none;border-top:1px solid var(--line);margin:8px 0">`;
+  h += `<div class="panel" style="padding:10px;">
+         <h3>New Ad Group</h3>
+         <label>Name</label><input id="ng-name" placeholder="e.g. Skincare Launch"
+                value="${esc(draft['ng-name']||"")}" oninput="draft['ng-name']=this.value">
+         <label>Direction (optional)</label><textarea id="ng-brief" rows="2"
+                oninput="draft['ng-brief']=this.value">${esc(draft['ng-brief']||"")}</textarea>
+         <button class="primary" style="margin-top:6px" onclick="createGroup()">Create</button>
+       </div>`;
+  h += `<div class="panel" style="padding:10px;">
+         <h3>Activity</h3>
+         ${activityFeed()}
+       </div>`;
+  el.innerHTML = h;
+}
+
+function createGroup() {
+  const name = document.getElementById("ng-name").value;
+  const brief = document.getElementById("ng-brief").value;
+  if (!name.trim()) return;
+  post({ action: "group.create", name, brief }).then(() => {
+    delete draft["ng-name"]; delete draft["ng-brief"];
+    typing = false; refresh();
+  });
+}
+
+function deleteGroup(gid, name) {
+  if (!confirm(`Delete ad group "${name}"? This permanently removes all its ads, media, and video.`)) return;
+  post({ action: "group.delete", group: gid }).then(() => {
+    if (selGroup === gid) { selGroup = null; selAd = null; }
+    refresh();
+  });
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;" }[c]));
+}
+
+function activityFeed() {
+  const items = S.activity || [];
+  if (!items.length) return `<div class="empty">Nothing yet.</div>`;
+  return items.map(a => {
+    const running = S.actions[a.key]?.state === "running";
+    const failed = !running && /fail/i.test(a.detail || "");
+    const badge = running ? `<span class="chip warn">running</span>`
+                 : failed ? `<span class="chip bad">failed</span>`
+                 : `<span class="chip good">done</span>`;
+    const t = a.ts ? new Date(a.ts * 1000).toLocaleTimeString() : "";
+    return `<div style="padding:4px 0;border-bottom:1px solid var(--line)">
+      <div><span class="muted">${esc(t)}</span> ${badge} <b>${esc(a.key)}</b></div>
+      <div class="muted" style="font-size:11.5px">${esc(a.detail)}</div>
+    </div>`;
+  }).join("");
+}
+
+function reviseWithFeedback(gid, gate, aid = "") {
+  const g = S.groups.find(x => x.id === gid);
+  if (!g) return;
+  const ad = aid ? (g.ads.find(x => x.id === aid) || {}) : {};
+  const adGate = ad.gates && ad.gates[gate];
+  const cur = gate === "product" ? (g.product_gate.notes || "")
+            : gate === "creator" ? (g.creator_gate.notes || "")
+            : (adGate && adGate.notes || "");
+  const notes = prompt("Revision feedback (applied to regeneration):", cur);
+  if (notes !== null) {
+    const action = gate === "product" ? "product.revise"
+                 : gate === "creator" ? "creator.revise_ref"
+                 : "script.revise";
+    act(action, gid, aid, notes);
+  }
+}
+
+function renderMain() {
+  const g = S.groups.find(x => x.id === selGroup);
+  const el = document.getElementById("main");
+  if (!g) { el.innerHTML = `<div class="empty">Create an Ad Group to begin.</div>`; return; }
+  if (!selAd) { renderGroup(g, el); return; }
+  const ad = g.ads.find(x => x.id === selAd);
+  if (!ad) { selAd = null; renderGroup(g, el); return; }
+  renderAd(g, ad, el);
+}
+
+// ---------- group view ----------
+
+function renderGroup(g, el) {
+  el.innerHTML = `
+    <div class="row" style="gap:10px;align-items:center;margin-bottom:12px">
+      <h1 style="font-size:18px;margin:0">${esc(g.name)}</h1>
+      ${chip(g.product_gate.status)}
+      <button style="margin-left:auto" onclick="selGroup=null;selAd=null;render()">All groups</button>
+      <button class="bad" onclick="deleteGroup('${g.id}','${esc(g.name)}')">Delete group</button>
+    </div>
+    <div class="grid cols2">
+      ${productPanel(g)}
+      ${creatorPanel(g)}
+    </div>
+    ${ideasPanel(g)}
+    ${adsPanel(g)}`;
+}
+
+function productPanel(g) {
+  const p = g.product || {};
+  return `<div class="panel">
+    <h2>Product <span class="muted">· Gate 1</span></h2>
+    <label>Upload product photo(s)</label>
+    <input type="file" accept="image/*" multiple id="prod-file">
+    <button onclick="uploadProduct('${g.id}')">Upload</button>
+    <div id="prod-uploads">${g.uploads.map(u => `<span class="chip muted">${esc(u)}</span>`).join(" ")}</div>
+    <label style="margin-top:10px">Product kind</label>
+    <select id="prod-kind" onchange="setProductKind('${g.id}', this.value)">
+      <option value="physical" ${p.product_kind !== "digital" ? "selected" : ""}>Physical product</option>
+      <option value="digital" ${p.product_kind === "digital" ? "selected" : ""}>Digital (website / web game / app)</option>
+    </select>
+    <div class="muted" style="font-size:11.5px">Switching kind rebuilds the product contract with on-screen
+      framing for a digital product (no physical staging).</div>
+    <button class="primary" style="margin-top:8px" onclick="act('product.normalize','${g.id}')"
+            ${g.uploads.length ? "" : "disabled"}>Normalize product</button>
+    <div id="prod-result">
+      ${p.canonical_product_description ? `
+        <h3>Canonical description</h3><p class="muted">${esc(p.canonical_product_description)}</p>
+        <div class="grid cols2"><div><label>Category</label><div>${esc(p.category)}</div></div>
+          <div><label>Tier</label><div>${esc(p.tier)}</div></div></div>
+        <label>Usage mechanic</label><div>${esc(p.usage_mechanic)}</div>
+        <label>Opening mechanic</label><div>${esc(p.opening_mechanic)}</div>
+        ${(p.absent_features||[]).length ? `<label>Absent features</label><div>${esc(p.absent_features.join(", "))}</div>`:""}
+        ${g.product_gate.status === "rejected" ? `<div class="note">Rejected — feedback to apply: ${esc(g.product_gate.notes || "no notes")}</div>` : ""}
+        <div style="margin-top:8px" class="row" style="gap:8px">
+          ${g.product_action?.state === "running" ? `<span class="chip warn">normalizing… ${esc(g.product_action.detail)}</span>` : ""}
+          ${g.product_gate.status === "pending" || g.product_gate.status === "rejected" ? `
+            <button class="good" onclick="gate('product.approve','${g.id}')">Approve</button>
+            ${g.product_gate.status === "rejected" ? `
+              <button class="primary" onclick="reviseWithFeedback('${g.id}','product')">Revise (apply feedback)</button>` : ""}
+            <button class="bad" onclick="rejectPrompt('product.reject','${g.id}')">Reject</button>` : `
+            ${chip(g.product_gate.status)}`}
+        </div>` : `<div class="empty">Upload a photo, then run Normalize. The local model writes the
+        canonical product contract used verbatim by every ad.</div>`}
+    </div>
+  </div>`;
+}
+
+function creatorPanel(g) {
+  const c = g.creator || {};
+  return `<div class="panel">
+    <h2>Creator <span class="muted">· Gate 2</span></h2>
+    <label>Upload a photo (this IS the creator identity)</label>
+    <input type="file" accept="image/*" id="cr-file">
+    <button onclick="uploadCreator('${g.id}')">Upload as creator</button>
+    <div class="muted" style="margin:6px 0">— or —</div>
+    <label>Generate creator (direction hint)</label>
+    <textarea id="cr-hint" rows="2" placeholder="e.g. warm girl-next-door, ~28, natural light"
+              oninput="draft['cr-hint']=this.value">${esc(draft['cr-hint']||"")}</textarea>
+    <button class="primary" onclick="act('creator.generate','${g.id}')">Generate creator + voice</button>
+    ${g.creator_action?.state === "running" ? `<div class="note">Generating… ${esc(g.creator_action.detail)}</div>` : ""}
+    ${g.creator_ref ? `<div style="margin:8px 0"><img src="/media/${g.id}/${g.creator_ref}"
+        style="width:96px;border-radius:8px;border:1px solid var(--line)"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        ${chip(g.creator_gate.status)}
+        ${chip(g.voice_gate.status)}
+        <button class="good" onclick="gate('creator.approve','${g.id}')">Approve identity</button>
+        <button class="bad" onclick="rejectPrompt('creator.reject','${g.id}')">Reject identity</button>
+        ${g.creator?.source !== "uploaded_photo" && g.creator_gate.status === "rejected" ? `
+          <button class="primary" onclick="reviseWithFeedback('${g.id}','creator')">Revise identity</button>` : ""}
+        <button class="good" onclick="gate('voice.approve','${g.id}')">Approve voice</button>
+        <button class="bad" onclick="rejectPrompt('voice.reject','${g.id}')">Reject voice</button>
+        <button class="bad" onclick="removeCreator('${g.id}')">Remove creator</button>
+      </div>
+      ${g.creator_voice ? `<label>Voice sample</label>
+        <audio controls preload="none" src="/media/${g.id}/creator/voice.wav" style="width:100%"></audio>` : ""}
+      ${c.persona_sentence ? `<p class="muted" style="margin-top:6px">Persona: ${esc(c.persona_sentence)}</p>` : ""}
+    ` : `<div class="empty">No creator identity yet.</div>`}
+  </div>`;
+}
+
+function ideasPanel(g) {
+  const ideas = g.ideas || [];
+  return `<div class="panel">
+    <h2>Ad Ideas <span class="muted">· brainstorm to production</span></h2>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="primary" onclick="act('ad.ideas','${g.id}')">Generate ad ideas</button>
+      ${g.ideas_action?.state === "running" ? `<span class="chip warn">thinking… ${esc(g.ideas_action.detail)}</span>` : ""}
+    </div>
+    ${ideas.length ? `<div style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+      ${ideas.map((idea, i) => `<div class="ad-card" style="cursor:default">
+        <b>${esc(idea.name)}</b>
+        ${idea.angle ? `<div class="muted" style="font-size:11.5px;margin-top:2px">${esc(idea.angle)}</div>` : ""}
+        ${idea.hook ? `<div class="note" style="margin:6px 0">Hook: ${esc(idea.hook)}</div>` : ""}
+        <div class="muted" style="font-size:12px">${esc(idea.direction || "")}</div>
+        ${idea.why_it_works ? `<div class="muted" style="font-size:11px;margin-top:4px">Why: ${esc(idea.why_it_works)}</div>` : ""}
+        <div class="row" style="gap:6px;margin-top:8px;align-items:center">
+          <span class="chip muted">${esc(idea.style || "style")}</span>
+          <span class="chip muted">${idea.duration_target_s || 30}s</span>
+          <button class="good" style="margin-left:auto" onclick="createAdFromIdea('${g.id}',${i})">Create ad</button>
+        </div>
+      </div>`).join("")}
+    </div>` : `<div class="empty">Generate ideas from the brand, product contract and creator, then build one into a full ad.</div>`}
+  </div>`;
+}
+
+function adsPanel(g) {
+  let h = `<div class="panel">
+    <h2>Ads <span class="muted">· each an independent run</span></h2>
+    <div class="grid cols2">
+      <div><label>Name</label><input id="ad-name" placeholder="e.g. Bathroom GRWM 30s"
+             value="${esc(draft['ad-name']||"")}" oninput="draft['ad-name']=this.value"></div>
+      <div><label>Duration (s)</label><input id="ad-dur" type="number" value="${esc(draft['ad-dur']||30)}"
+             min="15" max="60" oninput="draft['ad-dur']=this.value"></div>
+    </div>
+    <label>Direction (this ad only)</label>
+    <textarea id="ad-dir" rows="2" placeholder="e.g. opens skeptical, converts mid-way; product close-up at the end"
+              oninput="draft['ad-dir']=this.value">${esc(draft['ad-dir']||"")}</textarea>
+    <label>Style (preset or free-form, this ad only)</label>
+    <input id="ad-style" placeholder="e.g. Authentic Bathroom GRWM"
+           value="${esc(draft['ad-style']||"")}" oninput="draft['ad-style']=this.value">
+    <button class="primary" style="margin-top:8px" onclick="createAd('${g.id}')">Create Ad</button>
+    <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">
+      ${g.ads.map(ad => `<div class="ad-card" onclick="selAd='${ad.id}';render()">
+        <b>${esc(ad.name)}</b>
+        <div class="muted">${ad.duration_target_s}s · ${esc(ad.style_input || ad.style_contract?.name || "style")}</div>
+        <div class="row" style="gap:6px;margin-top:6px">
+          ${chip(ad.gates.script.status)} ${chip(ad.gates.video.status)}
+        </div>
+      </div>`).join("")}
+    </div>
+  </div>`;
+  return h;
+}
+
+// ---------- ad view ----------
+
+function renderAd(g, ad, el) {
+  const sc = ad.style_contract || {};
+  el.innerHTML = `
+    <div class="row" style="gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button onclick="selAd=null;render()">← ${esc(g.name)}</button>
+      <h1 style="font-size:18px;margin:0">${esc(ad.name)}</h1>
+      ${chip(ad.gates.script.status)} ${chip(ad.gates.video.status)}
+      ${ad.action?.state === "running" ? `<span class="chip warn">running…</span>` : ""}
+    </div>
+    ${pipelineStrip(g, ad)}
+    ${overviewPanel(ad)}
+    ${scriptPanel(g, ad)}
+    ${videoPanel(g, ad)}`;
+}
+
+function pipelineStrip(g, ad) {
+  const steps = [
+    { label: "Product", status: g.product_gate.status },
+    { label: "Creator", status: g.creator_gate.status },
+    { label: "Voice", status: g.voice_gate.status },
+    { label: "Script", status: ad.gates.script.status },
+    { label: "Video", status: ad.gates.video.status },
+  ];
+  const what = {
+    product: "Normalize and approve the product contract",
+    creator: "Upload or generate the creator identity",
+    voice: "Generate the creator voice",
+    script: "Generate the script",
+    video: "Render + stitch the video",
+  };
+  const firstOpen = steps.find(s => s.status !== "approved");
+  let hint;
+  if (!firstOpen) {
+    hint = "All gates approved — this ad is ready to render.";
+  } else {
+    const k = firstOpen.label.toLowerCase();
+    if (firstOpen.status === "pending") {
+      hint = `${firstOpen.label}: generated, awaiting your review. Approve it in the ${k} panel below (or reject with feedback).`;
+    } else if (firstOpen.status === "rejected") {
+      hint = `${firstOpen.label}: rejected — regenerate it with the "Regenerate (apply feedback)" button.`;
+    } else {
+      hint = `${firstOpen.label}: not started. Next: ${what[k] || ("approve " + k)}.`;
+    }
+  }
+  return `<div class="panel" style="padding:10px">
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      ${steps.map(s => `<span class="chip ${s.status==="approved"?"good":s.status==="rejected"?"bad":s.status==="pending"?"warn":"muted"}"
+            title="${esc(s.label)}: ${esc(s.status)}">${esc(s.label)}</span>`).join(" → ")}
+    </div>
+    <div class="muted" style="margin-top:6px">${esc(hint)}</div>
+  </div>`;
+}
+
+function overviewPanel(ad) {
+  const sc = ad.style_contract || {};
+  const plan = ad.script?.direction?.shot_plan || [];
+  return `<div class="panel">
+    <h2>Overview</h2>
+    <div class="grid cols2">
+      <div><label>Direction</label><div>${esc(ad.direction || "—")}</div>
+        <label>Duration target</label><div>${ad.duration_target_s}s</div>
+        <label>Style input</label><div>${esc(ad.style_input || "—")}</div></div>
+      <div><label>Style contract</label>
+        <div class="muted">${sc.name ? esc(sc.name) : "—"} · register ${esc(sc.register||"—")}</div>
+        <div class="muted" style="font-size:12px">
+          ${[sc.visual_look, sc.lighting, sc.color_grade, sc.camera_texture].filter(Boolean).join(" · ")}
+        </div>
+        <label>Hook / Story</label>
+        <div class="muted">${esc(ad.script?.direction?.hook_pattern || "—")} · ${esc(ad.script?.direction?.story_shape || "—")}</div>
+        ${ad.script?.direction?.persona_sentence ? `<div class="muted">${esc(ad.script.direction.persona_sentence)}</div>` : ""}
+      </div>
+    </div>
+    ${plan.length ? `<h3>Shot plan</h3>
+      <table><tr><th>#</th><th>Duration</th><th>Beat</th></tr>
+      ${plan.map((s, i) => `<tr><td>${i+1}</td><td>${esc(s.duration_s)}</td><td>${esc(s.beat)}</td></tr>`).join("")}
+      </table>` : ""}
+  </div>`;
+}
+
+function scriptPanel(g, ad) {
+  const script = ad.script || {};
+  const shots = script.shots || [];
+  const rejected = ad.gates.script.status === "rejected";
+  let reviews = "";
+  if (script.reviews) {
+    reviews = Object.entries(script.reviews).map(([k, v]) =>
+      `<tr><td>${k}</td><td>${v.pass ? "✅" : "❌"} ${v.score}/10</td>
+       <td>${(v.notes||[]).map(n => esc(typeof n === "string" ? n : n.note)).join("; ")}</td></tr>`).join("");
+  }
+  return `<div class="panel">
+    <h2>Script <span class="muted">· Gate 3</span></h2>
+    ${rejected ? `<div class="note">Rejected — feedback to apply: ${esc(ad.gates.script.notes || "no notes")}</div>` : ""}
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="primary" onclick="act('script.generate','${g.id}','${ad.id}')">Generate script</button>
+      ${rejected ? `<button class="primary" onclick="reviseWithFeedback('${g.id}','script','${ad.id}')">Regenerate (apply feedback)</button>`
+                 : `<button onclick="act('script.revise','${g.id}','${ad.id}',prompt('Rejection notes / changes'))">Revise</button>`}
+      ${ad.gates.script.status === "pending" || rejected ? `
+        <button class="good" onclick="gate('script.approve','${g.id}','${ad.id}')">Approve</button>
+        <button class="bad" onclick="rejectPrompt('script.reject','${g.id}','${ad.id}')">Reject</button>` : chip(ad.gates.script.status)}
+    </div>
+    ${shots.length ? `<table>
+      <tr><th>Shot</th><th>Dur</th><th>Cont</th><th>Camera</th><th>Action</th><th>Dialogue</th><th>Staging</th></tr>
+      ${shots.map(s => `<tr>
+        <td><b>${esc(s.id)}</b></td>
+        <td>${esc(s.duration_s)}s</td>
+        <td>${s.continuous ? "🔗" : "✂"}</td>
+        <td>${esc(s.camera)}</td>
+        <td>${esc(s.action)}</td>
+        <td>${(s.dialogue||[]).map(d => `“${esc(d.line)}”`).join("<br>")}</td>
+        <td class="muted">${esc((s.staging||{}).product_visible)} · ${esc((s.staging||{}).pov)} · ${esc((s.staging||{}).band)}</td>
+      </tr>`).join("")}
+    </table>` : `<div class="empty">Generate the script to see the monologue and shot breakdown.</div>`}
+    ${reviews ? `<h3>Reviews</h3><table>${reviews}</table>` : ""}
+  </div>`;
+}
+
+function videoPanel(g, ad) {
+  const final = ad.videos.includes("final.mp4");
+  const shots = ad.shot_videos || [];
+  const shotGrid = shots.length ? `<h3 style="margin-top:16px">Per-shot clips</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+      ${shots.map(v => `<div>
+        <video controls preload="none" src="/media/${g.id}/${esc(v.url)}"></video>
+        <div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <b>${esc(v.sid)}</b>
+          <span class="chip muted" title="${v.kind === "stitched" ? "this shot's segment of the continuous take" : "fresh render, hard-cut into the final"}">
+            ${v.kind === "stitched" ? "continuous take" : "shot"}</span>
+        </div>
+      </div>`).join("")}
+    </div>` : "";
+  return `<div class="panel">
+    <h2>Video <span class="muted">· Gate 4 · H3 ref2va + Retake Stitch</span></h2>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="primary" onclick="act('video.render','${g.id}','${ad.id}')">Render + stitch</button>
+      ${ad.gates.video.status === "pending" || ad.gates.video.status === "rejected" ? `
+        <button class="good" onclick="gate('video.approve','${g.id}','${ad.id}')">Approve</button>
+        <button class="bad" onclick="rejectPrompt('video.reject','${g.id}','${ad.id}')">Reject</button>` : chip(ad.gates.video.status)}
+    </div>
+    ${final ? `<h3 style="margin-top:12px">Final</h3>
+      <video controls src="/media/${g.id}/ads/${ad.id}/video/final.mp4"></video>` :
+      `<div class="empty">The finished continuous-take video lands here. Previews and per-shot clips are kept under the ad's video folder.</div>`}
+    ${shotGrid}
+    ${ad.videos.length ? `<div style="margin-top:8px">${ad.videos.map(v =>
+      `<span class="chip muted">${esc(v)}</span>`).join(" ")}</div>` : ""}
+  </div>`;
+}
+
+// ---------- actions ----------
+
+function act(action, gid, aid = "", notes = "") {
+  return post({ action, group: gid, ad: aid, notes }).then(() => { typing = false; refresh(); });
+}
+
+function gate(action, gid, aid = "") {
+  return act(action, gid, aid);
+}
+
+function rejectPrompt(action, gid, aid = "") {
+  const notes = prompt("Rejection notes (become ABSOLUTE constraints for regeneration):", "no notes");
+  if (notes !== null) act(action, gid, aid, notes);
+}
+
+function uploadProduct(gid) {
+  const f = document.getElementById("prod-file").files[0];
+  if (!f) return;
+  fileAsDataUrl(f, data => post({ action: "product.upload", group: gid, filename: f.name, data })
+    .then(() => refresh()));
+}
+
+function setProductKind(gid, kind) {
+  post({ action: "product.set_kind", group: gid, kind })
+    .then(() => { typing = false; refresh(); });
+}
+
+function uploadCreator(gid) {
+  const f = document.getElementById("cr-file").files[0];
+  if (!f) return;
+  fileAsDataUrl(f, data => post({ action: "creator.photo", group: gid, filename: f.name, data })
+    .then(() => refresh()));
+}
+
+function removeCreator(gid) {
+  if (!confirm("Remove the creator identity (photo, refs, and voice) so you can start over? "
+               + "Brand and product are kept.")) return;
+  act("creator.remove", gid);
+}
+
+function createAd(gid) {
+  const name = document.getElementById("ad-name").value;
+  const direction = document.getElementById("ad-dir").value;
+  const dur = document.getElementById("ad-dur").value;
+  const style = document.getElementById("ad-style").value;
+  post({ action: "ad.create", group: gid, name, direction, duration: dur || 30, style })
+    .then(r => { ["ad-name","ad-dir","ad-dur","ad-style"].forEach(k => delete draft[k]);
+                 typing = false; selAd = r.ad; refresh(); });
+}
+
+function createAdFromIdea(gid, i) {
+  const g = S.groups.find(x => x.id === gid);
+  const idea = g && g.ideas[i];
+  if (!idea) return;
+  post({ action: "ad.create", group: gid, name: idea.name, direction: idea.direction,
+         duration: idea.duration_target_s || 30, style: idea.style })
+    .then(r => { typing = false; selAd = r.ad; refresh(); });
+}
+
+function showActivity(S) {
+  const el = document.getElementById("activity");
+  const entries = Object.entries(S.actions).filter(([, a]) => a.state === "running");
+  if (!entries.length) { el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.innerHTML = entries.map(([k, a]) => `<b>${esc(k)}</b><div>${esc(a.detail)}</div>`).join("<hr>");
+}
+
+refresh();
+// Server push via SSE; EventSource auto-reconnects on drops.
+const es = new EventSource("/api/events");
+es.onopen = () => refresh();
+es.addEventListener("state", () => refresh());
+// Safety net: catch any missed event (e.g. one racing the initial connect).
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

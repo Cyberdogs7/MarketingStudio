@@ -1,0 +1,27 @@
+# LM Studio configuration (OpenAI-compatible, local). Primary + fallback.
+base_url: "http://127.0.0.1:1234/v1"
+fallback_url: "http://192.168.50.173:1235/v1"
+concurrency_limit: 4
+# ComfyUI instances whose running queue marks the GPU as busy (LLM prefers fallback then).
+gpu_guard_urls:
+  - "http://127.0.0.1:8188"
+  - "http://127.0.0.1:8190"
+model: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+context: 131072
+
+roles:
+  director: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+  writer: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+  shot: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+  reviewer: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+  judge: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+  # gemma-4-e4b is multimodal (vision works in-model). Single model avoids the
+  # lms CLI's unreliable model-switching on this setup. qwen3-vl-8b can be used
+  # here only when it is the sole loaded model.
+  describer: "gemma-4-e4b-uncensored-hauhaucs-aggressive"
+
+# gpu_offload: true = the GPU manager owns the LLM lifecycle with a NON-DESTRUCTIVE
+# probe-first loader (no reload if the model already serves), so a model evicted
+# mid-run is reloaded on the next retry. This self-heals LM Studio's evictions.
+gpu_offload: true
+evict_before_render: true

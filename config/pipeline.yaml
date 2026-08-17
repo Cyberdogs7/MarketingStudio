@@ -1,0 +1,8 @@
+# Pipeline runtime configuration.
+fps: 24
+resolution: [768, 1344]     # 9:16 vertical short-form
+default_shot_duration_s: 10.125
+insert_shot_duration_s: 5.167
+max_revisions: 2
+max_retakes_per_shot: 2
+storyboard_preview_s: 1.0

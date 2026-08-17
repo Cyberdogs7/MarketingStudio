@@ -1,0 +1,3 @@
+# Script review loop: reviewers + revision cap.
+max_revisions: 2
+roles: ["hook", "story", "runtime"]

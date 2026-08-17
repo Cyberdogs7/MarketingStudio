@@ -1,0 +1,35 @@
+# ComfyUI instances. worker = Krea 2 image gen (8190), renderer = H3 video (8188).
+nodes:
+  worker:
+    url: "http://127.0.0.1:8190"
+    api_key: null
+  renderer:
+    url: "http://127.0.0.1:8188"
+    api_key: null
+
+checkpoints:
+  krea2: "krea2TurboNSFWAIO_v10.safetensors"
+  krea2_clip: "qwen3vl_4b_fp8_scaled.safetensors"
+  krea2_clip_type: "krea2"
+  krea2_vae: "qwen_image_vae.safetensors"
+  krea2_lora: "fedor_bypass.safetensors"
+  h3_fl2va: "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
+  h3_ref2va: "minimax_h3_ref2va_pruned_fp8_scaled.safetensors"
+  h3_clip: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  h3_turbo_lora: "minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors"
+  h3_ref2v_turbo_lora: "minimax_h3_turbo_4step_ckpt500_pruned_comfyui.safetensors"
+  h3_video_vae: "minimax_h3_video_vae_fp16.safetensors"
+  h3_audio_vae: "minimax_h3_audio_vae_fp32.safetensors"
+
+manage_lifecycle: true
+startup_retries: 30
+fp32_vae: true
+
+# H3 sampling defaults (photoreal UGC output; 9:16 canvas from pipeline.resolution).
+# Turbo loras (fl2v lightx2v + ref2v ckpt500) improve quality at these steps.
+h3:
+  spectrum: false
+  first_block_cache: false
+  sampler: "res_multistep"
+  scheduler: "simple"
+  steps: 8

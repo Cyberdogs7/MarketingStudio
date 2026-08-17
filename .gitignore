@@ -1,0 +1,8 @@
+.venv/
+.playwright-mcp/
+__pycache__/
+*.pyc
+ad_groups/
+cache/
+.gpu-manager.lock
+.pytest_cache/
