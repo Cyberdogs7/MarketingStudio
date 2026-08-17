@@ -85,6 +85,34 @@ peak ("it's— okay wait. LOOK."), a flat -> spike -> settle arc across the clip
 Under NATURAL the peak stays human-scale (a real gasp, a breaking grin), never
 staged screaming. Never write engineered pauses — they bloat the line.
 
+## Audio state is explicit per shot (anti-gibberish)
+
+H3 renders video and audio jointly. If the compiled video prompt never states
+whether the creator speaks, the model invents vocal noise (gibberish mumbling)
+to fill the audio track. Every shot therefore declares its audio state EXPLICITLY:
+
+- **SPEAKING shot** — `dialogue` has one or more spoken lines. Each line is
+  written verbatim (the exact words, no descriptions). `on_camera: true` = the
+  creator is on screen and her lips move in sync with the line; `on_camera:
+  false` = an off-camera voiceover running over the visual (her lips stay
+  closed), used only when a line must continue over a beat where the creator is
+  not shown speaking.
+- **SILENT shot** — `dialogue` is `[]` (empty). This is the EXPLICIT declaration
+  that the creator says nothing in this shot: reaction beats, product close-ups,
+  setting / transition / insert shots. Never write a line for a purely visual
+  beat, and never imply speech where there is none.
+
+Rules:
+
+- Dialogue lives ONLY in `dialogue[]`. The camera / action / sound passes never
+  add spoken words, and the soundscape never repeats them.
+- A shot is speaking OR silent — no third state, no ambiguity. A silent shot is
+  a deliberate choice, not a gap.
+- Across the ad ~70% of runtime is still spoken (per the density table), but
+  individual shots may be fully silent when the beat is visual.
+- The sound pass fills a silent shot's audio layer with room tone / environment
+  so the audio is intentional, not empty.
+
 ## Product claims
 
 Use ONLY the brand's approved claims, each as its exact verbatim string. Never

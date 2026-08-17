@@ -17,6 +17,11 @@ Rules followed verbatim:
 - ``retention_analysis`` preserves the subject's identity exactly.
 - ``detailed_description`` opens with the style line, then ``[Shot 1]`` with the
   speaker as ``<Subject 1> (S1)`` and dialogue ONLY inside ``<d>[English] ...</d>``.
+- Every shot declares its vocal state EXPLICITLY: spoken lines bound to the
+  speaker (with a lips-closed closure after the last line; off-camera lines use
+  ``says in an off-screen voiceover ... lips remain completely closed``) OR a
+  silence clause (``does not speak ... remains completely silent, lips closed``).
+  Leaving it implied makes H3 invent gibberish audio.
 - ``overall_soundscape`` / ``non_diegetic_music`` last; N/A when absent.
 
 The ad's style contract is folded into the style line (look/lighting/grade/camera
@@ -103,15 +108,29 @@ def compile_shot_prompt(
         parts.append(cam)
     if product_description.strip():
         parts.append(f"Hold/present the product: {product_description.strip()[:400]}.")
-    for d in (shot.get("dialogue") or []):
-        line = (d.get("line") or "").strip()
-        if not line:
-            continue
-        if audio_ref:
-            parts.append(f"{subj} (S1) says, using the voice timbre referenced "
-                         f"from <Audio 1>, <d>[English] {line}</d>")
-        else:
-            parts.append(f"{subj} (S1) says, <d>[English] {line}</d>")
+
+    # Dialogue and silence are explicit: a shot either declares its spoken lines
+    # (bound to the speaker inside <d>) or declares the creator silent. Leaving
+    # this implied makes H3 invent gibberish mumbling on the audio track.
+    raw_dialogue = (shot.get("dialogue") or []) if isinstance(shot.get("dialogue"), list) else []
+    spoken = [(str(d.get("line") or "").strip(), bool(d.get("on_camera", True)))
+              for d in raw_dialogue if (d.get("line") or "").strip()]
+    if spoken:
+        for i, (line, on_camera) in enumerate(spoken):
+            if audio_ref:
+                says = f"{subj} (S1) says, using the voice timbre referenced from <Audio 1>"
+            else:
+                says = f"{subj} (S1) says"
+            if on_camera:
+                parts.append(f"{says}, <d>[English] {line}</d>")
+            else:
+                parts.append(f"{says} in an off-screen voiceover, <d>[English] {line}</d>, "
+                             f"while {name}'s lips remain completely closed")
+        parts.append(f"{name} stops speaking after the final line and remains silent, "
+                     f"lips closed, for the rest of the shot.")
+    else:
+        parts.append(f"{subj} does not speak in this shot - {name} remains completely "
+                     f"silent, lips closed, no dialogue.")
     shot_txt = " ".join(p for p in parts if p)
     style_txt = _style_line(style)
     detailed = f"{style_txt}\n[Shot 1] {', '.join(placed)}. {shot_txt}".strip()

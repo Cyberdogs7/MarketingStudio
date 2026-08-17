@@ -17,10 +17,12 @@ retention_analysis:
 
 detailed_description:
 <style line>
-[Shot 1] <Subject 1> (<name>), <appearance>. <action>. <camera>. <product staging>. <Subject 1> (S1) says, using the voice timbre referenced from <Audio 1>, <d>[English] <line></d>
+[Shot 1] <Subject 1> (<name>), <appearance>. <action>. <camera>. <product staging>.
+[SPEAKING clause] <Subject 1> (S1) says, using the voice timbre referenced from <Audio 1>, <d>[English] <exact words></d>. [<name> closes her lips after the line.]
+[or SILENT clause] <Subject 1> does not speak in this shot - <name> remains completely silent, lips closed, no dialogue.
 
 overall_soundscape:
-<shot soundscape or N/A>
+<shot soundscape, or N/A = intentional total silence>
 
 non_diegetic_music:
 <style music_feel or shot music or N/A>
@@ -40,3 +42,26 @@ non_diegetic_music:
 - Soundscape and music are the last two sections; `N/A` when absent.
 - No `@voice` or audio-reference notes inside the prompt string — audio is
   attached as a generation reference, never described.
+
+## Dialogue and silence are explicit (anti-gibberish)
+
+H3 generates the audio track jointly with the video. Every shot's
+`detailed_description` MUST state the creator's vocal state — speaking or
+silent — never leave it implied. A prompt that shows the creator but never says
+whether they talk makes H3 invent gibberish mumbling to fill the audio.
+
+- **Speaking shot:** every spoken line is bound to the speaker and wrapped in the
+  token: `<Subject 1> (S1) says, using the voice timbre referenced from <Audio 1>,
+  <d>[English] <exact words></d>`. Add the delivery/closure the model needs:
+  - On-camera line: lips move in sync with the line.
+  - Off-camera voiceover (`on_camera: false`): `says in an off-screen voiceover,
+    ... <d>[English] <words></d>, while <name>'s lips remain completely closed`.
+  - After the final spoken line, close the mouth: `<name> stops speaking and
+    remains silent, lips closed, for the rest of the shot.`
+- **Silent shot:** no `<d>` token at all, and the silence is stated outright:
+  `<Subject 1> does not speak in this shot - <name> remains completely silent,
+  lips closed, no dialogue.` The audio layer is then filled by
+  `overall_soundscape` (room tone / environment); `N/A` there means intentional
+  total silence.
+- Never put dialogue words in `overall_soundscape` / `non_diegetic_music` — they
+  belong only inside `<d>` in `detailed_description`.

@@ -431,7 +431,7 @@ def monologue_prompt(direction: dict[str, Any], brief: dict[str, Any],
             "id": "sh01, sh02, ...",
             "duration_s": "float from the shot plan",
             "continuous": "bool - true when this shot continues the previous take in the same place (H3 stitch), false on an intentional scene change",
-            "dialogue": [{"line": "spoken line", "on_camera": "bool"}],
+            "dialogue": "[{'line': 'exact spoken words', 'on_camera': bool}]; an EMPTY list [] means this shot is SILENT - the creator says nothing in it",
             "summary": "one sentence: what happens in this shot",
         }],
     }
@@ -453,7 +453,17 @@ def monologue_prompt(direction: dict[str, Any], brief: dict[str, Any],
         "- dialogue['line'] contains ONLY the exact words spoken aloud - a clean, spoken "
           "sentence. No descriptions, no persona/voice text, no stage directions, no narrator "
           "prose.\n"
-        "- Word budget per shot from the density table; ~70% of runtime should be spoken.\n"
+        "- EVERY shot declares its audio state EXPLICITLY: dialogue has spoken lines "
+          "(SPEAKING shot) or dialogue is [] (SILENT shot - the creator says nothing in that "
+          "shot). Never leave a shot's speech ambiguous; a silent shot (reaction beat, product "
+          "close-up, setting/transition) is a deliberate choice, not a gap. H3 invents gibberish "
+          "mumbling when a shot's prompt never says whether the creator speaks.\n"
+        "- on_camera: true = the creator is on screen and her lips move in sync with the line; "
+          "on_camera: false = an off-camera voiceover over the visual (her lips stay closed), "
+          "used only when a line must continue over a beat where the creator is not shown "
+          "speaking.\n"
+        "- Word budget per shot from the density table; ~70% of runtime should be spoken, but "
+          "individual shots may be fully silent when the beat is visual.\n"
         "- The register, hook and story shape are VERBATIM contracts - do not vary them.\n"
         + (f"\nABSOLUTE DIRECTOR CONSTRAINTS (from the last rejection - follow every one; they "
            f"OVERRIDE the brand/direction/product where they conflict):\n{notes}\n" if notes else "")
@@ -506,7 +516,10 @@ _SHOT_PASSES: list[dict[str, Any]] = [
         }]},
         "instructions": (
             "Give each shot its background soundscape and music cue matching the beat and the "
-            "style's music_feel. Use 'none' for silent beats."),
+            "style's music_feel. Use 'none' for silent beats. A shot with EMPTY dialogue is a "
+            "SILENT shot - fill its audio with environment/room tone so the layer is intentional, "
+            "not empty. Never put spoken words in the soundscape; dialogue is owned by the "
+            "monologue pass and must not be repeated or invented here."),
         "fields": ["soundscape", "music"],
     },
 ]

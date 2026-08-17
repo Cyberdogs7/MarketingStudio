@@ -82,7 +82,16 @@ def _normalize_shots(shots: list[dict[str, Any]], direction: dict[str, Any],
         s["duration_s"] = _snap(s["_req"])
         s.setdefault("continuous", True)
         s.setdefault("on_camera", True)
-        s.setdefault("dialogue", [])
+        # Normalize dialogue lines: exact spoken words only, explicit on_camera
+        # flag per line (default True = on-screen, lips move). Empty list = a
+        # SILENT shot (the creator says nothing) - this is explicit, never a gap.
+        dlg: list[dict[str, Any]] = []
+        for d in (s.get("dialogue") or []):
+            if not isinstance(d, dict) or not (d.get("line") or "").strip():
+                continue
+            dlg.append({"line": str(d["line"]).strip(),
+                        "on_camera": bool(d.get("on_camera", True))})
+        s["dialogue"] = dlg
         s.setdefault("camera", "")
         s.setdefault("action", "")
         s.setdefault("staging", {})

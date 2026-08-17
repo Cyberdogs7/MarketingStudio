@@ -240,5 +240,52 @@ def _test_dashboard():
         server.shutdown()
 
 
+def test_prompt_dialogue_grammar():
+    """The deterministic H3 prompt must declare each shot's vocal state: spoken
+    lines inside <d> OR an explicit silence clause - never neither (else H3
+    invents gibberish audio). Off-camera lines carry the lips-closed note."""
+    from studio.compile.shot_prompt import compile_shot_prompt
+
+    creator = {"name": "Maya", "appearance_canonical": "mid-20s, dark bob"}
+    style = {}
+    base = dict(shot=None, creator=creator, product_description="",
+                style=style, ad_summary="test ad", n_pictures=1, audio_ref=True)
+
+    def build(shot):
+        return compile_shot_prompt(**{**base, "shot": shot})
+
+    # 1. on-camera speaking shot + audio ref
+    p = build({"id": "sh01", "action": "leans in", "camera": "static MID",
+               "dialogue": [{"line": "One pump. That's it.", "on_camera": True}]})
+    assert "says, using the voice timbre referenced from <Audio 1>" in p
+    assert "<d>[English] One pump. That's it.</d>" in p
+    assert "stops speaking after the final line and remains silent" in p
+
+    # 2. off-camera voiceover -> lips-closed note
+    p = build({"id": "sh02", "action": "presents the bottle", "camera": "static TIGHT",
+               "dialogue": [{"line": "Look at this.", "on_camera": False}]})
+    assert "in an off-screen voiceover" in p
+    assert "while Maya's lips remain completely closed" in p
+    assert "<d>[English] Look at this.</d>" in p
+
+    # 3. SILENT shot -> explicit silence clause, no <d> token
+    p = build({"id": "sh03", "action": "holds the bottle, nods", "camera": "static MID",
+               "dialogue": []})
+    assert "does not speak in this shot" in p
+    assert "remains completely silent, lips closed, no dialogue" in p
+    assert "<d>" not in p
+
+    # 4. no audio ref -> plain form, closure still present
+    p = compile_shot_prompt(**{**base, "audio_ref": False,
+                               "shot": {"id": "sh04", "action": "waves", "camera": "selfie MID",
+                                        "dialogue": [{"line": "Bye!", "on_camera": True}]}})
+    assert "<Subject 1> (S1) says, <d>[English] Bye!</d>" in p
+    assert "voice timbre referenced" not in p
+    assert "stops speaking after the final line" in p
+    print("SMOKE OK: dialogue/silence prompt grammar")
+    return True
+
+
 if __name__ == "__main__":
     test_pipeline()
+    test_prompt_dialogue_grammar()

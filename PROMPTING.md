@@ -7,8 +7,17 @@ path that gives the studio character identity and voice-timbre consistency per s
 Authoritative code:
 - `studio/render.py` — `compile_shot_prompt()` builds the prompt (six sections).
 - `studio/h3.py` — `build_h3_ref2va_workflow()` wires refs as sockets on `MiniMaxH3ReferenceToVideo`.
-- `studio/prompts.py` — `h3_rewrite_prompt()` optional LLM expansion.
-- `studio/compile/h3_prompt.py` — the older deterministic multi-shot compiler.
+- `studio/prompts.py` — `monologue_prompt()` / shot passes (LM Studio LLM context).
+- `studio/compile/shot_prompt.py` — the deterministic compiler (dialogue + silence grammar).
+
+Prompting sources this guide is distilled from:
+- MiniMax H3 Ref2VA rewrite guide: `skills/h3-prompt-writing/references/ref-en.txt` and
+  `base-en.txt` in <https://github.com/MiniMax-AI/MiniMax-H3> (speaker `(Sx)` IDs, `<d>[Language] …</d>`,
+  voiceover lips-closed rule, `N/A` = explicit silence).
+- Luma MiniMax H3 prompting guide: <https://lumalabs.ai/learning-center/articles/minimax-h3-prompting-guide>
+  (dialogue as part of the performance; separate dialogue / ambience / SFX / music).
+- Community cheat sheet: <https://www.reddit.com/r/StableDiffusion/comments/1vnis23/>
+  ("dialogue needs a visible speaker … explicitly say who does not speak too" — the anti-gibberish rule).
 
 ---
 
@@ -165,13 +174,32 @@ the voice timbre referenced from <Audio 1>, <d>[English] The package. Where is i
 - Composition: `action` then `camera`, joined.
 - **Every spoken line lives inside `<d>[English] …</d>`.** Never put dialogue words
   outside the token — H3 reads bare words as narration.
-- Dialogue is bound to the speaker and, when an audio ref exists, to that ref:
 
-  | Case | Template |
-  |---|---|
-  | speaker + audio ref | `<Subject N> (Sx) says, using the voice timbre referenced from <Audio N>, <d>[English] line</d>` |
-  | speaker, no audio ref | `<Subject N> (Sx) says, <d>[English] line</d>` |
-  | no subject | `A voice says, <d>[English] line</d>` |
+#### Dialogue and silence are explicit (anti-gibberish)
+
+H3 generates the audio track jointly with the video. A shot prompt that shows the
+creator but never states whether they speak makes H3 invent **gibberish mumbling**
+to fill the audio. Every shot therefore carries an explicit vocal clause — either
+a speaking clause or a silence clause, never neither. This follows MiniMax's own
+`VIDEO_PROMPT_WRITING_GUIDE` / Ref2VA guide (speakers get `(Sx)`; voices that
+never vocalize are explicitly silent; voiceover lines end with the speaker's lips
+closed) and the community cheat-sheet rule ("explicitly say who does not speak").
+
+| Shot type | Template |
+|---|---|
+| speaking, on-camera + audio ref | `<Subject N> (Sx) says, using the voice timbre referenced from <Audio N>, <d>[English] line</d>` |
+| speaking, on-camera, no audio ref | `<Subject N> (Sx) says, <d>[English] line</d>` |
+| speaking, off-camera voiceover | `<Subject N> (Sx) says in an off-screen voiceover, <d>[English] line</d>, while <name>'s lips remain completely closed` |
+| speaking — closure after the last line | `<name> stops speaking and remains silent, lips closed, for the rest of the shot.` |
+| **silent shot** (no dialogue) | `<Subject N> does not speak in this shot - <name> remains completely silent, lips closed, no dialogue.` |
+
+- `on_camera: false` (voiceover) is used only when a line must continue over a beat
+  where the creator is not shown speaking; the **lips-closed note is mandatory** so
+  H3 does not sync mouth movement to a line it cannot see spoken.
+- A silent shot keeps `<d>` out of the prompt entirely and states the silence
+  outright; its audio layer is then filled by `overall_soundscape` (room
+  tone / environment). `overall_soundscape: N/A` means intentional total silence.
+- Dialogue is never repeated in `overall_soundscape` / `non_diegetic_music`.
 
 ### 5.5 `overall_soundscape`
 Environment/Foley, e.g. `wind, distant sirens`. `N/A` when absent.
@@ -226,9 +254,14 @@ six-section form for ref2va shots, the timeline form for fl2va/keyframe batches.
 - [ ] `subject_definitions` binds every `<Subject N>` to its `<Picture N>`.
 - [ ] `summary` prefix matches the ref set: `[reference generation + audio reference]`.
 - [ ] `retention_analysis` audio lines have **no** `(Sx)`.
-- [ ] Dialogue only inside `<d>[English] …</d>`, bound to `<Subject N> (Sx)` and, when
-      present, `referenced from <Audio N>`.
-- [ ] `overall_soundscape` / `non_diegetic_music` = `N/A` when empty (never omitted).
+- [ ] **Every shot declares its vocal state explicitly**: spoken lines inside
+      `<d>[English] …</d>` bound to `<Subject N> (Sx)` and, when present,
+      `referenced from <Audio N>`; **or** an explicit silence clause
+      (`does not speak … remains completely silent, lips closed`). Never neither.
+- [ ] Off-camera voiceover lines carry the lips-closed note; speaking shots close
+      the lips after the last line.
+- [ ] `overall_soundscape` / `non_diegetic_music` = `N/A` when empty (never omitted);
+      `N/A` soundscape = intentional total silence.
 - [ ] LLM rewrite preserves tags verbatim and dialogue words exactly, or is dropped.
 
 ---
@@ -241,5 +274,8 @@ six-section form for ref2va shots, the timeline form for fl2va/keyframe batches.
 | Character doesn't appear at all | Character not in `references.characters`; no approved ref | Fix the shot's cast; approve/regenerate the ref image |
 | Wrong vocal timbre or no lip-sync | Audio ref missing/not attached | Speaker must be in `names`, have a voice sample, and the shot must have image refs |
 | Bare words spoken as narration | Dialogue outside `<d>` tokens | Re-wrap lines inside `<d>[English] …</d>` |
+| **Gibberish audio / mumbling when the creator shouldn't speak** | The shot's prompt never states the creator's vocal state, so H3 invents speech to fill the audio | Ensure the shot has an explicit clause: spoken lines inside `<d>` **or** `… does not speak in this shot - … remains completely silent, lips closed, no dialogue.` |
+| Creator keeps mumbling after a line | No mouth-closure after the dialogue | Append `… stops speaking and remains silent, lips closed, for the rest of the shot.` after the last `<d>` line |
+| Mouth moves but no line is heard (voiceover) | On-camera form used for an off-screen line | Use `says in an off-screen voiceover, <d>…</d>, while <name>'s lips remain completely closed` |
 | Missing subject/audio in output | Rewriter dropped a tag | Disable `pipeline.h3_rewrite_prompt` or tighten the rewrite system prompt |
 | Ref rejected by renderer | File too large / bad format | Re-export the wav/png; keep refs at H3-native sizes |
