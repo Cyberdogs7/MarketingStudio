@@ -389,7 +389,9 @@ and every video prompt — nothing downstream paraphrases or drifts.
 ## 8. Video generation + H3 stitch specifics
 
 - **Workflow**: `build_h3_ref2va_workflow` ported verbatim (refs as sockets → `<Picture N>` /
-  `<Audio N>`); 9:16 canvas (e.g. 768×1344) from config; sampling per `config/comfy.yaml`.
+  `<Audio N>`); 9:16 canvas derived from the **megapixels** budget (`pipeline.megapixels`, default
+  `0.4` → ~474×843) via `canvas_from_megapixels` in `studio/render.py` (falls back to the explicit
+  `pipeline.resolution` override); sampling per `config/comfy.yaml` (`h3.steps` default `8`).
 - **Durations**: snapped to the H3 grid (`compile/durations.py`); ad target 15–60 s → 2–5 shots.
 - **Stitch orchestrator** (`studio/stitch.py`, new):
   - Shot 1: fresh `ref2va` render (creator + product + keyframe refs, voice as `<Audio 1>`).
@@ -440,7 +442,7 @@ MarketingStudio/
     scriptgen.py                # A2 monologue + review loop
     prompts.py                  # prompt builders (inject rules/, strict JSON)
     storyboard.py               # A3 keyframes + consistency QC
-    render.py                   # A4 H3 ref2va per shot
+    render.py                   # A4 H3 ref2va per shot (canvas from pipeline.megapixels)
     stitch.py                   # A4 H3 Retake Stitch orchestrator + ffmpeg concat
     review.py                   # UGC reviewers
     approval.py                 # gate state machine

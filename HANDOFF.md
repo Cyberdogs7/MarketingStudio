@@ -26,9 +26,12 @@ UGC marketing — nothing anime carries over. See `DESIGN.md` for the full spec.
   generation produced a complete 4-shot / 30s ad with genuine UGC copy, a coherent hook→convert
   arc, and hook/story/runtime reviews. Offline smoke test (`tests/smoke.py`, fake LLM) is green,
   including the dashboard HTTP layer.
-- **Gates 4–5 (storyboard / H3 video) not exercised** — both ComfyUI instances were down. Start them
-  (`run_krea2_gpu.bat` on 8190, `run_h3.bat` on 8188) to test keyframes + ref2va + the retake-stitch
-  orchestrator.
+- **Gates 4–5 (H3 video) partially exercised.** H3 rendering **does work** on this 16 GB RTX 4060 Ti,
+  **but only within a small render footprint** (see §7 below). Full-resolution `768×1344` at `8` steps
+  over-commits VRAM under `--lowvram` and **hangs mid-step** — the GPU pegs at 100% utilization while
+  drawing only ~43 W of its 165 W limit and the sampler stalls after step 1. The working footprint:
+  0.4 MP canvas (~474×843) at 8 steps renders a 345-frame shot in **~13 min** at full power
+  (140–165 W, ~11 GB VRAM). Krea 2 on 8190 is confirmed running.
 
 ## 3. LLM stability on this setup (READ FIRST)
 
@@ -67,7 +70,29 @@ Still, the server wedging **cannot be fully papered over in code**. If real runs
 .venv\Scripts\python.exe tests\smoke.py     # offline pipeline + dashboard test
 ```
 
-## 6. Next steps
+## 6. H3 render footprint (READ BEFORE RENDERING)
+
+The 16 GB RTX 4060 Ti cannot render H3 at full resolution under `--lowvram`. The render canvas and
+sampling are set in config and are **the difference between a clean render and a mid-step hang**:
+
+- `config/pipeline.yaml` → `megapixels: 0.4` — the H3 9:16 canvas budget. `studio/render.py`'s
+  `canvas_from_megapixels(0.4)` resolves to **~474×843 (~0.4 MP)**. Lower it if a shot OOMs; raise it
+  only if you can free more VRAM (see the LM Studio note below).
+- `config/comfy.yaml` → `h3.steps: 8` — sampler steps (the loaded LoRA is a 4-step turbo LoRA; 8 is
+  used for quality, doubling render time over 4).
+- Canvas is derived in **both** `studio/render.py::_canvas` and `studio/stitch.py` (they share
+  `canvas_from_megapixels`), so a config change applies to fresh renders and to retake-extensions
+  alike.
+
+**Hang signature to watch for:** if the GPU pins at 100% utilization but draws only ~40 W (of 165 W)
+and the sampler never advances past ~step 1, VRAM is over-committed and `--lowvram` is thrashing.
+Fix: drop `megapixels` (or free VRAM) rather than waiting — the job is wedged, not slow.
+
+**VRAM headroom:** LM Studio's gemma is usually loaded on the same card. The GPU manager unloads the LLM
+(`lms unload --all`) before starting ComfyUI H3, but an externally-launched LM Studio model can
+re-pin VRAM between runs. Confirm `lms ps` reports "no models loaded" before a render.
+
+## 7. Next steps
 
 1. Start Krea 2 (8190) + H3 (8188) ComfyUI; test storyboard keyframes (Gate 4) and per-shot H3
    ref2va + retake-stitch (Gate 5) on the `glow-skincare` ad group.

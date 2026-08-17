@@ -21,7 +21,8 @@ CONFIG_DIR = ROOT / "config"
 DEFAULTS: dict[str, dict[str, Any]] = {
     "pipeline": {
         "fps": 24,
-        "resolution": [480, 864],       # 9:16 LOW (0.41MP) — H3 can't render bigger on this card; upscale later
+        "megapixels": 0.4,             # H3 render canvas budget (9:16); ~0.4 MP fits 16 GB VRAM
+        "resolution": [512, 896],      # back-compat override; ignored when megapixels is set
         "default_shot_duration_s": 10.125,
         "insert_shot_duration_s": 5.167,
         "max_revisions": 2,

@@ -144,8 +144,26 @@ def render_shot_preview(client: ComfyClient, group, ad, shot: dict[str, Any],
 
 
 def _canvas(cfg) -> tuple[int, int]:
-    res = cfg.get("pipeline", "resolution", [768, 1344])
+    """H3 render canvas, derived from the pipeline megapixels budget at 9:16.
+
+    ``pipeline.megapixels`` sets the total pixel budget (e.g. 0.4 = ~0.4 MP).
+    When it is set it overrides ``pipeline.resolution`` (kept for back-compat and
+    as an explicit override). Neither set defaults to 512x896 (~0.46 MP), the
+    largest 9:16 canvas that reliably fits this 16 GB card under --lowvram.
+    """
+    mpx = cfg.get("pipeline", "megapixels", None)
+    if mpx not in (None, "", 0):
+        return canvas_from_megapixels(float(mpx), ratio="9:16")
+    res = cfg.get("pipeline", "resolution", [512, 896])
     return int(res[0]), int(res[1])
+
+
+def canvas_from_megapixels(megapixels: float, ratio: str = "9:16") -> tuple[int, int]:
+    """Compute the closest integer w x h for a pixel budget at a 9:16 aspect."""
+    rw, rh = (9, 16) if ratio == "9:16" else (16, 9)
+    width = int(round((megapixels * 1e6 * rw / rh) ** 0.5))
+    height = int(round(width * rh / rw))
+    return width, height
 
 
 def frame_count(video_path: Path, fps: int = 24) -> int:

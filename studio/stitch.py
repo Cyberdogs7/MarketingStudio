@@ -25,7 +25,7 @@ from .config import get_config
 from .gpu_manager import ServiceType, get_gpu_manager
 from .h3 import build_h3_retake_workflow, run_h3_shot
 from .render import (compile_prompt, frame_count, render_client, render_shot,
-                     shot_ref_paths, upload_refs)
+                     shot_ref_paths, upload_refs, canvas_from_megapixels)
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +72,11 @@ def _render_and_stitch(group: AdGroup, ad: Ad, cfg=None, progress=None) -> Path:
     client = render_client(cfg)
     fps = int(cfg.get("pipeline", "fps", 24) or 24)
     global_prompt = _ad_global_prompt(group, ad)
-    width, height = cfg.get("pipeline", "resolution", [480, 864])
+    mpx = cfg.get("pipeline", "megapixels", None)
+    if mpx not in (None, "", 0):
+        width, height = canvas_from_megapixels(float(mpx), ratio="9:16")
+    else:
+        width, height = cfg.get("pipeline", "resolution", [512, 896])
     h3_cfg = cfg.get("comfy", "h3", {})
 
     running: Path | None = None       # the stitched MP4 so far

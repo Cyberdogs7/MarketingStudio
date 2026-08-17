@@ -1,6 +1,9 @@
 # Pipeline runtime configuration.
 fps: 24
-resolution: [768, 1344]     # 9:16 vertical short-form
+# Total pixel budget for the H3 render canvas (9:16). 0.4 => ~474x843 (~0.4 MP),
+# comfortably within 16 GB VRAM under --lowvram. Overrides pipeline.resolution below.
+megapixels: 0.4
+resolution: [512, 896]      # back-compat / explicit override; ignored when megapixels is set
 default_shot_duration_s: 10.125
 insert_shot_duration_s: 5.167
 max_revisions: 2
